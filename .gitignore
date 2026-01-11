@@ -1,0 +1,32 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+
+# IDE
+.gemini/
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build artifacts
+build/
+dist/
+*.spec.bak
+*.egg-info/
+
+# Databases
+*.db
+
+# Screenshots and debug
+screenshots/
+debug/
+
+# OS
+.DS_Store
+Thumbs.db
