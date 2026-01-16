@@ -1166,7 +1166,8 @@ class RealRacingBot:
                          self.device_tap(final_x, final_y)
                          # Skip to Verification
                          self.current_timezone_state = target
-                         self.wait_return_to_settings(city, memory_key, (mx, my, mw, mh)) # Refactored verification?
+                         # Refactored verification (removed phantom call wait_return_to_settings)
+                         self.logger.save_ocr_memory(memory_key, city, mx, my, mw, mh, 0) # Confirmamos memoria
                          # For now, duplicate logic or let it flow?
                          # Let's just set a flag to skip the heavy search below logic
                          # But easier to just return/break
