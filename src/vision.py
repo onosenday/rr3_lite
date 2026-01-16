@@ -197,13 +197,14 @@ class Vision:
             pass # Seguirá al final
 
         height, width = image.shape[:2]
-        # ROIs: Esquinas (25%)
-        roi_size_w = int(width * 0.25)
-        roi_size_h = int(height * 0.25)
+        # ROIs: Esquinas (RESTRINGIDAS al 15% para evitar Falsos Positivos)
+        roi_size_w = int(width * 0.15)
+        roi_size_h = int(height * 0.15)
         
         rois = [
-            # Solo buscar a la DERECHA (arriba y abajo) donde suelen estar los botones de acelerar
+            ("top_left", 0, 0, roi_size_w, roi_size_h),
             ("top_right", width - roi_size_w, 0, width, roi_size_h),
+            ("bottom_left", 0, height - roi_size_h, roi_size_w, height),
             ("bottom_right", width - roi_size_w, height - roi_size_h, width, height)
         ]
 
