@@ -136,6 +136,38 @@ class RealRacingBot:
              self.adb.long_tap(x, y, int(duration * 1000))
         else:
              self.adb.tap(x, y)
+
+    def wait_for_package(self, package_snippet, timeout=5.0):
+        """
+        Espera activa hasta que el paquete actual contenga package_snippet.
+        Retorna True si lo encontró, False si hubo timeout.
+        """
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            current = self.adb.get_current_package()
+            if current and package_snippet in current:
+                return True
+            time.sleep(0.2) # Polling rápido
+        return False
+
+    def verify_return_to_settings(self):
+        """Helper para verificar que volvimos a la pantalla anterior."""
+        self.log(f"Esperando retorno a pantalla Settings...")
+        # Polling rapido
+        start_wait_return = time.time()
+        found_return = False
+        while time.time() - start_wait_return < 5.0: # 5s timeout
+             scr_check = self.adb.take_screenshot()
+             texts = self.ocr.get_screen_texts(scr_check)
+             # IMPORTANTE: OCR devuelve palabras sueltas. No buscar frases.
+             # Buscamos "Fecha" o "Seleccionar".
+             found_return = any("Seleccionar" in t[0] or "Fecha" in t[0] or "Date" in t[0] for t in texts)
+             
+             if found_return:
+                  self.log("✅ Detectada pantalla de ajustes. Cambio confirmado.")
+                  return True
+             time.sleep(0.3)
+        return False
     
     def set_action(self, action):
         """Registra la accion actual para logging."""
@@ -286,10 +318,12 @@ class RealRacingBot:
 
     def handle_google_survey(self, screenshot):
         """
-        Maneja la encuesta de Google en 2 pasos:
-        1. Click en 'X' (Arriba izquierda) si detecta 'Google'/'Encuesta'.
-        2. Click en 'Saltar' si aparece el botón.
-        Retorna True si realizado alguna acción.
+        Maneja la encuesta de Google:
+        1. Detectar contexto (Google + Encuesta/Survey/etc).
+        2. Click en 'X' (Arriba izquierda).
+        3. Refrescar screenshot.
+        4. Click en 'Saltar' (si aparece).
+        Retorna True si se ejecutó la secuencia.
         """
         # Primero leemos todo el texto para contexto
         text_lines = self.ocr.get_lines(screenshot)
@@ -310,29 +344,50 @@ class RealRacingBot:
         # Si llegamos aqui, es MUY probable que sea una encuesta de Google.
         self.log(f"Posible Encuesta Google detectada (Contexto: Google + {specific_keywords}).")
 
-        # 1. Buscar botón 'Saltar' (Paso 2)
-        saltar_pos = self.ocr.find_text(screenshot, "Saltar", case_sensitive=True)
-        if saltar_pos:
-            self.log(f"Encuesta Google: Botón 'Saltar' detectado en {saltar_pos}. Click.")
-            self.device_tap(saltar_pos[0], saltar_pos[1])
-            time.sleep(2)
-            return True
-
-        # 2. Buscar Pantalla 1 (Buscamos la X arriba a la izquierda)
+        # 1. Buscar Pantalla 1 (Buscamos la X arriba a la izquierda)
         # Intentar buscar la 'X' específicamente
         x_pos = self.ocr.find_text(screenshot, "X", exact_match=True)
         
         if x_pos and x_pos[1] < 200 and x_pos[0] < 300: # X debe estar arriba izquierda
             self.log(f"Encuesta Google: Click en 'X' encontrada por OCR en {x_pos}.")
             self.device_tap(x_pos[0], x_pos[1])
-            time.sleep(2)
+            time.sleep(1) # Esperar transición
+            
+            # 2. Buscar botón 'Saltar' (Paso 2) - REFRESCO INMEDIATO
+            self.log("Encuesta Google: Buscando botón 'Saltar' post-X...")
+            new_scr = self.adb.take_screenshot()
+            saltar_pos = self.ocr.find_text(new_scr, "Saltar", case_sensitive=True)
+            
+            if saltar_pos:
+                self.log(f"Encuesta Google: Botón 'Saltar' detectado en {saltar_pos}. Click.")
+                self.device_tap(saltar_pos[0], saltar_pos[1])
+                time.sleep(1)
+                return True
+            else:
+                # Fallback: A veces dice "Skip"
+                 skip_pos = self.ocr.find_text(new_scr, "Skip", case_sensitive=True)
+                 if skip_pos:
+                      self.log(f"Encuesta Google: Botón 'Skip' detectado en {skip_pos}. Click.")
+                      self.device_tap(skip_pos[0], skip_pos[1])
+                      time.sleep(1)
+                      return True
+                 
+            self.log("Encuesta Google: No se encontró botón Saltar/Skip tras X. Asumiendo cerrado.")
             return True
             
-        # Si el contexto es MUY fuerte (ej: "tecnologia de google"), podemos arriesgar click ciego
+        # Si el contexto es MUY fuerte (ej: "tecnologia de google"), podemos arriesgar click ciego a la X
         if "tecnologia" in full_text or "technology" in full_text:
             self.log("Encuesta Google: Contexto fuerte pero no veo X. Usando click ciego (170, 80).")
             self.device_tap(170, 80)
-            time.sleep(2)
+            time.sleep(1)
+            
+            # Misma logica de refresco
+            self.log("Encuesta Google: Buscando botón 'Saltar' post-click ciego...")
+            new_scr = self.adb.take_screenshot()
+            saltar_pos = self.ocr.find_text(new_scr, "Saltar", case_sensitive=True)
+            if saltar_pos:
+                self.device_tap(saltar_pos[0], saltar_pos[1])
+                time.sleep(1)
             return True
         
         return False
@@ -932,11 +987,16 @@ class RealRacingBot:
              
              self.state_data["target_zone"] = target
              self.log(f"Iniciando secuencia TZ hacia: {target}")
-             self.state = BotState.TZ_OPEN_SETTINGS
 
-        elif self.state == BotState.TZ_OPEN_SETTINGS:
-             self.adb._run_command(["am", "start", "-a", "android.settings.DATE_SETTINGS"])
-             time.sleep(0.5) # Reduced from 1.0s
+             self.log("Abriendo Configuración de Fecha...")
+             self.adb.shell("am start -a android.settings.DATE_SETTINGS")
+             
+             # OPTIMIZATION: Wait for package instead of sleep
+             if self.wait_for_package("settings", timeout=2.0):
+                 self.log(f"✅ Ajustes detectados rápido.")
+             else:
+                 self.log(f"⏳ Espera estándar agotada para Ajustes.")
+                 
              self.state = BotState.TZ_SEARCH_REGION
              
         elif self.state == BotState.TZ_SEARCH_REGION:
@@ -1018,7 +1078,24 @@ class RealRacingBot:
              
              self.log(f"⌨ Escribiendo texto: {term}")
              self.adb._run_command(["input", "text", term])
-             time.sleep(2)
+             
+             # OPTIMIZATION: Polling for results
+             self.log("⌨ Esperando resultados (polling)...")
+             found_results = False
+             for _ in range(6): # Max 3s (6 * 0.5s)
+                 time.sleep(0.5)
+                 scr_check = self.adb.take_screenshot()
+                 # Check if we see text that looks like a result
+                 txts = self.ocr.get_screen_texts(scr_check, min_y=250)
+                 # Si hay texto en la zona de resultados, asumimos que cargó
+                 if len(txts) > 0:
+                     self.log(f"✅ Resultados detectados ({len(txts)} items).")
+                     found_results = True
+                     break
+             
+             if not found_results:
+                 self.log("⚠ Timeout esperando resultados. Continuando a ciegas.")
+             
              self.state = BotState.TZ_SELECT_COUNTRY
              
         elif self.state == BotState.TZ_SELECT_COUNTRY:
@@ -1044,47 +1121,79 @@ class RealRacingBot:
              if "city_blacklist" not in self.state_data:
                  self.state_data["city_blacklist"] = []
              
-             time.sleep(2.5)
-             scr = self.adb.take_screenshot()
-             
-             # DEBUG: Ver qué texto hay en la lista de ciudades
-             all_texts = self.ocr.get_screen_texts(scr)
-             self.log(f"DEBUG CITY OCR: {[t[0] for t in all_texts]}")
-             
-             # MASKING: Tachar zonas de la blacklist
-             for (bx, by, bw, bh) in self.state_data["city_blacklist"]:
-                 self.log(f"🕵‍♀ SmartRetry: Ignorando zona fallida previa en ({bx},{by})")
-                 # Dibujar rectangulo negro para que OCR no lo vea
-                 cv2.rectangle(scr, (bx, by), (bx+bw, by+bh), (0, 0, 0), -1)
-
+             # OPTIMIZATION: Quick Check with Hint Coords
              memory = self.logger.get_ocr_memory(memory_key)
              hint_coords = None
              
-             # VALIDACIÓN MEMORIA: Ignorar si es demasiado grande (>90% pantalla)
-             if memory and memory["w"] > 0:
-                 if memory["w"] > scr.shape[1] * 0.9:
-                     self.log(f"🧠 OCR Memory CORRUPTA (Too huge) para '{city}': {memory}. IGNORANDO.")
-                     hint_coords = None
-                 else:
-                     # Verificar si la memoria cae en zona blacklisted
-                     mx, my, mw, mh = memory["x"], memory["y"], memory["w"], memory["h"]
-                     is_blacklisted = False
-                     for (bx, by, bw, bh) in self.state_data["city_blacklist"]:
-                         # Chequeo simple de proximidad (centro cerca de centro)
-                         mcx, mcy = mx + mw//2, my + mh//2
-                         bcx, bcy = bx + bw//2, by + bh//2
-                         if abs(mcx - bcx) < 50 and abs(mcy - bcy) < 50:
-                             is_blacklisted = True
-                             break
+             # VALIDACIÓN MEMORIA
+             if memory and memory["w"] > 0 and memory["w"] < 1000: # Sanity check simple
+                 mx, my, mw, mh = memory["x"], memory["y"], memory["w"], memory["h"]
+                 
+                 # Check Blacklist
+                 is_blacklisted = False
+                 for (bx, by, bw, bh) in self.state_data["city_blacklist"]:
+                     if abs((mx+mw//2) - (bx+bw//2)) < 50:
+                         is_blacklisted = True
+                         break
+                 
+                 if not is_blacklisted:
+                     hint_coords = (mx, my, mw, mh)
+                     self.log(f"🧠 Memoria disponible para QuickCheck: {hint_coords}")
                      
-                     if is_blacklisted:
-                         self.log(f"🧠 OCR Memory apunta a zona BLACKLISTED. Ignorando memoria.")
-                         hint_coords = None
-                     else:
-                         hint_coords = (mx, my, mw, mh)
-                         self.log(f"🧠 OCR Memory LOADED para '{city}' (Key: {memory_key}): {hint_coords}")
+                     # Quick Check: Take screenshot and look ONLY at hint region first?
+                     # Actually, `find_text_adaptive` takes hint_coords but searches whole if fails.
+                     # We can try a super-fast verify:
+                     time.sleep(0.5) # Minimal wait for render
+                     scr = self.adb.take_screenshot()
+                     
+                     # Crop region (with margin)
+                     margin = 20
+                     y1 = max(0, my - margin)
+                     y2 = min(scr.shape[0], my + mh + margin)
+                     x1 = max(0, mx - margin)
+                     x2 = min(scr.shape[1], mx + mw + margin)
+                     
+                     crop = scr[y1:y2, x1:x2]
+                     found_in_crop = self.ocr.find_text(crop, city)
+                     
+                     if found_in_crop:
+                         self.log(f"⚡ QUICK CHECK ÉXITO: '{city}' encontrado en memoria.")
+                         # Adjust coords to global
+                         cx, cy = found_in_crop
+                         final_x = x1 + cx
+                         final_y = y1 + cy
+                         
+                         self.device_tap(final_x, final_y)
+                         # Skip to Verification
+                         self.current_timezone_state = target
+                         self.wait_return_to_settings(city, memory_key, (mx, my, mw, mh)) # Refactored verification?
+                         # For now, duplicate logic or let it flow?
+                         # Let's just set a flag to skip the heavy search below logic
+                         # But easier to just return/break
+                         # We need to do the Return Verification here as well.
+                         if self.verify_return_to_settings():
+                             self.log(f"⚡ Zona cambiada a {city} (Quick).")
+                             self.state = BotState.TZ_RETURN_GAME
+                             return
+
+             # Si falla Quick Check o no hay memoria, hacemos el Full Scan estándar
+             self.log("🐢 QuickCheck falló/no-memoria. Iniciando escaneo completo...")
+             time.sleep(1.5) # Wait resto del tiempo (ya esperamos 0.5)
+             scr = self.adb.take_screenshot()
+             
+             # DEBUG: Ver qué texto hay en la lista de ciudades
+             # all_texts = self.ocr.get_screen_texts(scr)
+             # self.log(f"DEBUG CITY OCR: {[t[0] for t in all_texts]}")
+             
+             # MASKING: Tachar zonas de la blacklist
+             for (bx, by, bw, bh) in self.state_data["city_blacklist"]:
+                  cv2.rectangle(scr, (bx, by), (bx+bw, by+bh), (0, 0, 0), -1)
+
+             # Re-Load memory for adaptive search guidance (if valid)
+             if hint_coords:
+                  self.log(f"🧠 Usando Hint Coords para búsqueda adaptativa global.")
              else:
-                 self.log(f"🧠 OCR Memory EMPTY/CLEARED para '{city}' (Key: {memory_key}). Buscando full screen...")
+                  self.log(f"🧠 Buscando full screen (sin memoria).")
              
              # Búsqueda adaptativa
              result = self.ocr.find_text_adaptive(scr, city, hint_coords=hint_coords)
@@ -1111,39 +1220,18 @@ class RealRacingBot:
                  self.current_timezone_state = target
                  
                  # VERIFICACIÓN DE RETORNO A "SELECCIONAR ZONA HORARIA"
-                 # Esperar hasta que volvamos a la pantalla anterior
-                 self.log(f"Esperando retorno a pantalla Settings...")
-                 time.sleep(1.0) 
-                 
-                 start_wait_return = time.time()
-                 found_return = False
-                 while time.time() - start_wait_return < 5.0: # 5s timeout
-                     scr_check = self.adb.take_screenshot()
-                     texts = self.ocr.get_screen_texts(scr_check)
-                     self.log(f"🔎 DEBUG RETURN OCR: {[t[0] for t in texts]}") # DEBUG
-                     # IMPORTANTE: OCR devuelve palabras sueltas. No buscar frases.
-                     # Buscamos "Fecha" o "Seleccionar".
-                     found_return = any("Seleccionar" in t[0] or "Fecha" in t[0] or "Date" in t[0] for t in texts)
-                     
-                     if found_return:
-                          self.log("✅ Detectada pantalla de ajustes. Cambio confirmado.")
-                          break
-                     time.sleep(0.5)
-                 
-                 if found_return:
-                     self.log(f"Zona cambiada a {city}. Volviendo al juego...")
-                     self.logger.save_ocr_memory(memory_key, city, rx, ry, rw, rh, threshold_used) # CONFIRMAMOS MEMORIA
-                     self.state = BotState.TZ_RETURN_GAME
+                 if self.verify_return_to_settings():
+                      self.log(f"Zona cambiada a {city}. Volviendo al juego...")
+                      self.logger.save_ocr_memory(memory_key, city, rx, ry, rw, rh, threshold_used) # CONFIRMAMOS MEMORIA
+                      self.state = BotState.TZ_RETURN_GAME
                  else:
-                     self.log(f"❌ Click en '{city}' falló (No volvimos a Settings). Blacklisting zona y reintentando...")
-                     
-                     # 1. Borrar memoria (era mala)
-                     self.logger.save_ocr_memory(memory_key, "", 0, 0, 0, 0, 0)
-                     
-                     # 2. BLACKLIST: Añadir esta zona para no volver a clickarla
-                     self.state_data["city_blacklist"].append((rx, ry, rw, rh))
-                     
-                     time.sleep(1)
+                      self.log(f"❌ Click en '{city}' falló (No volvimos a Settings). Blacklisting zona y reintentando...")
+                      # 1. Borrar memoria (era mala)
+                      self.logger.save_ocr_memory(memory_key, "", 0, 0, 0, 0, 0)
+                      # 2. BLACKLIST
+                      self.state_data["city_blacklist"].append((rx, ry, rw, rh))
+                      time.sleep(1)
+
              else:
                  # SIN FALLBACK: Quedarse en el estado para reintentar
                  self.log(f"❌ No se pudo encontrar ciudad '{city}' tras OCR adaptativo (Masked). Reintentando...")
@@ -1164,9 +1252,15 @@ class RealRacingBot:
              time.sleep(0.5)
              
              # 2. Lanzar juego con Monkey (más robusto que am start directo)
+             # 2. Lanzar juego con Monkey (más robusto que am start directo)
              self.adb.start_app(PACKAGE_NAME)
              
-             time.sleep(4) # Esperar resume
+             # OPTIMIZATION: Wait for package instead of sleep(4)
+             if self.wait_for_package(PACKAGE_NAME, timeout=8.0):
+                 self.log("✅ Juego recuperó foco.")
+                 time.sleep(1.0) # Estabilización GPU
+             else:
+                 self.log("⚠ Timeout esperando foco juego. Continuando...")
              self.state_data.clear() # Limpiar objetivo para siguiente ciclo
              self.state = BotState.GAME_LOBBY
 
