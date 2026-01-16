@@ -989,7 +989,7 @@ class RealRacingBot:
              self.log(f"Iniciando secuencia TZ hacia: {target}")
 
              self.log("Abriendo Configuración de Fecha...")
-             self.adb.shell("am start -a android.settings.DATE_SETTINGS")
+             self.adb._run_command(["am", "start", "-a", "android.settings.DATE_SETTINGS"])
              
              # OPTIMIZATION: Wait for package instead of sleep
              if self.wait_for_package("settings", timeout=2.0):
