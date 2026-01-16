@@ -741,6 +741,7 @@ class RealRacingBot:
         black_screen_counter = 0
         
         focus_recovery_attempts = 0
+        ff_persistence_counter = 0
         
         while time.time() - start_wait < 150: # Timeout
             if self.is_stopped(): return "LOBBY"
@@ -834,19 +835,27 @@ class RealRacingBot:
             # 6. Fast Forward (Transition -> REWARD)
             match_ff = self.vision.find_fast_forward_button(screenshot)
             if match_ff:
-                 self.log("Fast Forward detectado. Click.")
-                 # Usar offset aleatorio pequeño para evitar "píxel muerto" o detección de bot
-                 import random
-                 ff_x, ff_y, ff_w, ff_h = match_ff
+                 ff_persistence_counter += 1
+                 self.log(f"Fast Forward detectado ({ff_persistence_counter}/2)...")
                  
-                 # Offset +/- 5px del centro
-                 off_x = random.randint(-5, 5)
-                 off_y = random.randint(-5, 5)
-                 
-                 # Click con duración explícita (0.15s) para asegurar registro
-                 self.device_tap(ff_x + off_x, ff_y + off_y, duration=0.15)
-                 time.sleep(2.0) # Aumentar espera post-click
-                 continue
+                 if ff_persistence_counter >= 2:
+                     self.log("Fast Forward CONFIRMADO. Click.")
+                     # Usar offset aleatorio pequeño para evitar "píxel muerto" o detección de bot
+                     import random
+                     ff_x, ff_y, ff_w, ff_h = match_ff
+                     
+                     # Offset +/- 5px del centro
+                     off_x = random.randint(-5, 5)
+                     off_y = random.randint(-5, 5)
+                     
+                     # Click con duración explícita (0.15s) para asegurar registro
+                     self.device_tap(ff_x + off_x, ff_y + off_y, duration=0.15)
+                     
+                     ff_persistence_counter = 0 # Reset
+                     time.sleep(2.0) # Aumentar espera post-click
+                     continue
+            else:
+                 ff_persistence_counter = 0 # Reset si se pierde un frame
             
             # --- CHEQUEOS DE SEGURIDAD (Stall/Black) ---
             import cv2

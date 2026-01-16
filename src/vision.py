@@ -198,9 +198,8 @@ class Vision:
         roi_size_h = int(height * 0.25)
         
         rois = [
-            ("top_left", 0, 0, roi_size_w, roi_size_h),
+            # Solo buscar a la DERECHA (arriba y abajo) donde suelen estar los botones de acelerar
             ("top_right", width - roi_size_w, 0, width, roi_size_h),
-            ("bottom_left", 0, height - roi_size_h, roi_size_w, height),
             ("bottom_right", width - roi_size_w, height - roi_size_h, width, height)
         ]
 
@@ -238,7 +237,7 @@ class Vision:
                 res = cv2.matchTemplate(roi_img, tmpl, cv2.TM_CCOEFF_NORMED)
                 min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
                 
-                if max_val > 0.55: # Threshold reducido para mejor detección
+                if max_val > 0.70: # Threshold AUMENTADO de 0.55 -> 0.70
                     h, w = tmpl.shape[:2]
                     global_x = x1 + max_loc[0] + w // 2
                     global_y = y1 + max_loc[1] + h // 2
