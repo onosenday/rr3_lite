@@ -197,9 +197,9 @@ class Vision:
             pass # Seguirá al final
 
         height, width = image.shape[:2]
-        # ROIs: Esquinas (RESTRINGIDAS al 15% para evitar Falsos Positivos)
+        # ROIs: Esquinas (RESTRINGIDAS al 15% ancho, 10% alto para evitar Falsos Positivos)
         roi_size_w = int(width * 0.15)
-        roi_size_h = int(height * 0.15)
+        roi_size_h = int(height * 0.10)
         
         rois = [
             ("top_left", 0, 0, roi_size_w, roi_size_h),
