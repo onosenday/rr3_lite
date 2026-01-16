@@ -5,7 +5,9 @@ PACKAGE_NAME = "com.ea.games.r3_row"
 
 # Rutas de las
 # Configuración ADB y Rutas
-ASSETS_DIR = "assets"
+import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ASSETS_DIR = os.path.join(BASE_DIR, "assets")
 COIN_ICON_TEMPLATE = "coin_icon.png"
 AD_CONFIRM_TEMPLATE = "ad_confirm_button.png"
 AD_CLOSE_TEMPLATE = "ad_close_button.png"

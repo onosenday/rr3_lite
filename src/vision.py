@@ -185,7 +185,11 @@ class Vision:
         import os
         
         # Buscar todos los patrones
-        asset_pattern = os.path.join("assets", "ff_button*.png")
+        # Usar ruta absoluta basada en la ubicación de este script (src/vision.py)
+        # Los assets están en src/assets, es decir, en el mismo directorio padre 'src' + 'assets'
+        base_dir = os.path.dirname(os.path.abspath(__file__)) # .../src
+        assets_dir = os.path.join(base_dir, "assets")       # .../src/assets
+        asset_pattern = os.path.join(assets_dir, "ff_button*.png")
         files = glob.glob(asset_pattern)
         
         if not files:
