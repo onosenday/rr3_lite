@@ -1,0 +1,10 @@
+# RR3 Bot Lite - Dependencies (No ML)
+# ====================================
+# Versión independiente sin componentes de Machine Learning
+
+# Core dependencies
+opencv-python>=4.8.0
+numpy>=1.24.0
+Pillow>=10.0.0
+pytesseract>=0.3.10
+adbutils>=1.2.0

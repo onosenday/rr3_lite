@@ -39,6 +39,9 @@ class BotGUI:
         
         self.bot_instance = None
         
+        # Stat block title labels for translation updates (must be before _setup_ui)
+        self.stat_title_labels = {}
+        
         self.logo_photo = None
         try:
             # Robust Path Resolution
@@ -89,6 +92,10 @@ class BotGUI:
         self.chart_window = None
         self.calendar_window = None
         self.chart_offset = 0 # Offset de dias para la grafica
+        
+        # Refresh functions for real-time updates
+        self.refresh_chart_func = None
+        self.refresh_calendar_func = None
         
         # Click Visualization
         self.active_clicks = [] # Stores (x, y, timestamp)
@@ -322,19 +329,19 @@ class BotGUI:
         self.lbl_stats_section.pack(anchor=tk.W, pady=(0,15))
         
         # SESSION TIMER
-        self.lbl_runtime = self._create_stat_block(right_panel, t("stat_session_time"), "00:00:00", "#63B3ED")
+        self.lbl_runtime = self._create_stat_block(right_panel, t("stat_session_time"), "00:00:00", "#63B3ED", "stat_session_time")
         
         # GOLD SESSION
-        self.lbl_gold = self._create_stat_block(right_panel, t("stat_session_gold"), "0", "#F6E05E")
+        self.lbl_gold = self._create_stat_block(right_panel, t("stat_session_gold"), "0", "#F6E05E", "stat_session_gold")
         
         # GOLD RATE
-        self.lbl_gold_speed = self._create_stat_block(right_panel, t("stat_gold_rate"), "0", "#F6E05E")
+        self.lbl_gold_speed = self._create_stat_block(right_panel, t("stat_gold_rate"), "0", "#F6E05E", "stat_gold_rate")
         
         # ADS RATE
-        self.lbl_speed = self._create_stat_block(right_panel, t("stat_ads_rate"), "0.0", "#63B3ED")
+        self.lbl_speed = self._create_stat_block(right_panel, t("stat_ads_rate"), "0.0", "#63B3ED", "stat_ads_rate")
         
         # TOTAL HISTORY
-        self.lbl_gold_history = self._create_stat_block(right_panel, t("stat_total_history"), "--", "#CBD5E0")
+        self.lbl_gold_history = self._create_stat_block(right_panel, t("stat_total_history"), "--", "#CBD5E0", "stat_total_history")
         
         # GRAPHS & CALENDAR
         btn_frame = tk.Frame(right_panel, bg="#1E3246")
@@ -345,12 +352,16 @@ class BotGUI:
         self.btn_calendar = tk.Button(btn_frame, text=t("btn_calendar"), bg="#2D3748", fg="white", bd=0, pady=5, command=self._show_calendar_view)
         self.btn_calendar.pack(fill=tk.X, pady=2)
 
-    def _create_stat_block(self, parent, label, initial, color):
+    def _create_stat_block(self, parent, label, initial, color, translation_key=None):
         frame = tk.Frame(parent, bg="#1E3246")
         frame.pack(fill=tk.X, pady=(0, 15))
-        tk.Label(frame, text=label, fg="#829AB1", bg="#1E3246", font=("Segoe UI", 9)).pack(anchor=tk.W)
+        title_lbl = tk.Label(frame, text=label, fg="#829AB1", bg="#1E3246", font=("Segoe UI", 9))
+        title_lbl.pack(anchor=tk.W)
         lbl = tk.Label(frame, text=initial, fg=color, bg="#1E3246", font=("Segoe UI", 20, "bold"))
         lbl.pack(anchor=tk.W)
+        # Store reference for translation updates
+        if translation_key:
+            self.stat_title_labels[translation_key] = title_lbl
         return lbl
 
     def _create_metric_row(self, parent, label, initial, color):
@@ -392,6 +403,18 @@ class BotGUI:
             self.lbl_gold_history.config(text=f"{total_history:,}")
             self.lbl_speed.config(text=f"{ads_per_hour:.1f} /h")
             self.lbl_gold_speed.config(text=f"{int(gold_per_hour):,} /h")
+            
+            # Auto-refresh graph and calendar if open
+            if self.refresh_chart_func:
+                try:
+                    self.refresh_chart_func()
+                except:
+                    pass
+            if self.refresh_calendar_func:
+                try:
+                    self.refresh_calendar_func()
+                except:
+                    pass
         self.root.after(0, _update)
 
     def _start_queue_processing(self):
@@ -555,6 +578,8 @@ class BotGUI:
         # Panel izquierdo
         self.lbl_header.config(text=t("header_title"))
         self.lbl_battery_label.config(text=t("battery_label"))
+        self.lbl_wifi_label.config(text=t("wifi_label"))
+        self.lbl_brightness_label.config(text=t("brightness_label"))
         self.lbl_lang_section.config(text=t("language_section"))
         self.lbl_control_section.config(text=t("control_section"))
         self.btn_start.config(text=t("btn_start"))
@@ -577,6 +602,10 @@ class BotGUI:
         self.lbl_stats_section.config(text=t("stats_section"))
         self.btn_chart.config(text=t("btn_chart"))
         self.btn_calendar.config(text=t("btn_calendar"))
+        
+        # Actualizar labels de título de stats
+        for key, label in self.stat_title_labels.items():
+            label.config(text=t(key))
 
     def start_bot(self):
         if self.bot_thread and self.bot_thread.is_alive():
@@ -682,7 +711,9 @@ class BotGUI:
     def _show_history_chart(self):
         """Muestra popup con gráfica de barras navegable."""
         if self.chart_window is not None and self.chart_window.winfo_exists():
-            self.chart_window.lift()
+            self.chart_window.destroy()
+            self.chart_window = None
+            self.refresh_chart_func = None
             return
 
         self.chart_offset = 0 # Reset al abrir
@@ -692,6 +723,13 @@ class BotGUI:
         popup.title(t("chart_title"))
         popup.geometry("600x450")
         popup.configure(bg="#102A43")
+        
+        # Cleanup on close
+        def on_close():
+            self.refresh_chart_func = None
+            self.chart_window = None
+            popup.destroy()
+        popup.protocol("WM_DELETE_WINDOW", on_close)
         
         # Header Navegable
         header = tk.Frame(popup, bg="#102A43")
@@ -740,11 +778,11 @@ class BotGUI:
             
             # Query
             cursor.execute("""
-                SELECT date(created_at), SUM(amount) 
-                FROM gold_log 
-                WHERE date(created_at) BETWEEN ? AND ?
-                GROUP BY date(created_at)
-                ORDER BY date(created_at)
+                SELECT date(timestamp), SUM(amount) 
+                FROM gold_history 
+                WHERE date(timestamp) BETWEEN ? AND ?
+                GROUP BY date(timestamp)
+                ORDER BY date(timestamp)
             """, (start_date.isoformat(), end_date.isoformat()))
             
             raw_data = cursor.fetchall()
@@ -785,18 +823,28 @@ class BotGUI:
                 canvas.create_text(x + bar_w//2, ch-25, text=day, fill="#829AB1", font=("Segoe UI", 9))
         
         refresh_chart()
+        self.refresh_chart_func = refresh_chart  # Store for external refresh
 
     def _show_calendar_view(self):
         """Muestra popup con calendario de actividad."""
         if self.calendar_window is not None and self.calendar_window.winfo_exists():
-            self.calendar_window.lift()
+            self.calendar_window.destroy()
+            self.calendar_window = None
+            self.refresh_calendar_func = None
             return
             
         popup = tk.Toplevel(self.root)
         self.calendar_window = popup
         popup.title(t("calendar_title"))
-        popup.geometry("500x420")
+        popup.geometry("550x480")
         popup.configure(bg="#102A43")
+        
+        # Cleanup on close
+        def on_close():
+            self.refresh_calendar_func = None
+            self.calendar_window = None
+            popup.destroy()
+        popup.protocol("WM_DELETE_WINDOW", on_close)
         
         # State
         today = datetime.now()
@@ -841,10 +889,15 @@ class BotGUI:
             year, month = current_date
             lbl_month.config(text=f"{calendar.month_name[month]} {year}")
             
-            # Weekday Headers
+            # Configure uniform column widths
+            for i in range(7):
+                grid_frame.columnconfigure(i, weight=1, uniform="cal_col", minsize=66)
+            
+            # Weekday Headers - adjusted to match cell width
             days_header = ["L", "M", "X", "J", "V", "S", "D"]
             for i, d in enumerate(days_header):
-                tk.Label(grid_frame, text=d, fg="#627D98", bg="#102A43", font=("Segoe UI", 10, "bold"), width=4).grid(row=0, column=i, pady=5)
+                lbl = tk.Label(grid_frame, text=d, fg="#627D98", bg="#102A43", font=("Segoe UI", 10, "bold"))
+                lbl.grid(row=0, column=i, pady=5, sticky="nsew")
             
             # Get month data
             import sqlite3
@@ -854,10 +907,10 @@ class BotGUI:
             
             # Get days with activity
             cursor.execute("""
-                SELECT date(created_at), SUM(amount) 
-                FROM gold_log 
-                WHERE strftime('%Y', created_at) = ? AND strftime('%m', created_at) = ?
-                GROUP BY date(created_at)
+                SELECT date(timestamp), SUM(amount) 
+                FROM gold_history 
+                WHERE strftime('%Y', timestamp) = ? AND strftime('%m', timestamp) = ?
+                GROUP BY date(timestamp)
             """, (str(year), f"{month:02d}"))
             
             activity = {row[0]: row[1] for row in cursor.fetchall()}
@@ -867,23 +920,46 @@ class BotGUI:
             cal = calendar.monthcalendar(year, month)
             for row_idx, week in enumerate(cal):
                 for col_idx, day in enumerate(week):
+                    # Empty cell for days outside month
                     if day == 0:
-                        tk.Label(grid_frame, text="", bg="#102A43", width=4, height=2).grid(row=row_idx+1, column=col_idx)
+                        empty_cell = tk.Frame(grid_frame, bg="#102A43", height=55)
+                        empty_cell.grid(row=row_idx+1, column=col_idx, padx=3, pady=3, sticky="nsew")
                     else:
                         date_str = f"{year}-{month:02d}-{day:02d}"
                         has_gold = date_str in activity
                         gold_amount = activity.get(date_str, 0)
                         
-                        bg = "#38A169" if has_gold else "#1E3246"
-                        fg = "#FFFFFF" if has_gold else "#829AB1"
-                        
-                        lbl = tk.Label(grid_frame, text=str(day), bg=bg, fg=fg, 
-                                      font=("Segoe UI", 10), width=4, height=2, cursor="hand2" if has_gold else "")
-                        lbl.grid(row=row_idx+1, column=col_idx, padx=2, pady=2)
-                        
+                        # Colors - gradient effect for days with gold
                         if has_gold:
-                            lbl.bind("<Enter>", lambda e, g=gold_amount: e.widget.config(text=f"{int(g):,}"))
-                            lbl.bind("<Leave>", lambda e, d=day: e.widget.config(text=str(d)))
+                            bg = "#2F855A"  # Slightly darker green
+                            border_color = "#48BB78"  # Lighter green border effect
+                            fg = "#FFFFFF"
+                        else:
+                            bg = "#1E3246"
+                            border_color = "#243B53"
+                            fg = "#829AB1"
+                        
+                        # Outer frame (border effect) - use sticky for uniform width
+                        outer = tk.Frame(grid_frame, bg=border_color, height=55)
+                        outer.grid(row=row_idx+1, column=col_idx, padx=3, pady=3, sticky="nsew")
+                        
+                        # Inner cell with padding to create border effect
+                        cell = tk.Frame(outer, bg=bg)
+                        cell.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
+                        
+                        # Day number (top) - larger, centered
+                        tk.Label(cell, text=str(day), bg=bg, fg=fg, 
+                                font=("Segoe UI", 12, "bold")).pack(pady=(8, 2))
+                        
+                        # Gold amount (bottom) - show if has gold
+                        if has_gold:
+                            # Format: 1.5K for 1500, 12K for 12000, etc.
+                            if gold_amount >= 1000:
+                                gold_text = f"{gold_amount/1000:.1f}K"
+                            else:
+                                gold_text = str(int(gold_amount))
+                            tk.Label(cell, text=gold_text, bg=bg, fg="#F6E05E", 
+                                    font=("Segoe UI", 9, "bold")).pack()
         
         def navigate(delta):
             current_date[1] += delta
@@ -896,6 +972,7 @@ class BotGUI:
             refresh_calendar()
         
         refresh_calendar()
+        self.refresh_calendar_func = refresh_calendar  # Store for external refresh
 
     def _reset_buttons(self):
         self.is_bot_running = False

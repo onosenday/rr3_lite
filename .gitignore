@@ -26,7 +26,15 @@ dist/
 # Screenshots and debug
 screenshots/
 debug/
+roi_debug*.png
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Private files (not for GitHub)
+.agent/
+.env
+todo.md
+REPOSITORY_DESCRIPTION.md
+src/.lang_preference

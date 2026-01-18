@@ -10,6 +10,7 @@ from adb_wrapper import ADBWrapper
 from vision import Vision
 from ocr import OCR
 from logger import GoldLogger
+from i18n import t
 from enum import Enum, auto
 
 class BotState(Enum):
@@ -126,7 +127,7 @@ class RealRacingBot:
         Realiza un click directo en las coordenadas del dispositivo usando ADB.
         No requiere conversion ni calibracion si las coordenadas vienen de la screenshot.
         """
-        self.log(f"ADB Tap en ({int(x)}, {int(y)})")
+        self.log(t("log_adb_tap", x=int(x), y=int(y)))
         
         # Click Visualization Callback
         if self.click_callback:
@@ -455,28 +456,28 @@ class RealRacingBot:
         return True
 
     def run(self):
-        self.log("Iniciando Bot Real Racing 3 (State-Aware)...")
+        self.log(t("log_starting_bot"))
         if not self.adb.connect():
-            self.log("Error: Dispositivo no conectado.")
+            self.log(t("log_device_not_connected"))
             self.stop_event.set()
             return
 
         # ===== CONFIGURACIÓN INICIAL DEL DISPOSITIVO =====
         # Activar WiFi si está desactivado
         if self.adb.ensure_wifi_enabled():
-            self.log("📶 WiFi activado automáticamente.")
+            self.log(t("log_wifi_enabled"))
         else:
-            self.log("📶 WiFi ya estaba activo.")
+            self.log(t("log_wifi_already_active"))
         
         # Poner brillo al mínimo para ahorrar batería
-        self.log("🔅 Configurando brillo al mínimo...")
+        self.log(t("log_brightness_min"))
         self.adb.set_brightness_min()
         # ================================================
 
         # Verificar si el juego está corriendo
-        self.log(f"Verificando estado de {PACKAGE_NAME}...")
+        self.log(t("log_game_verifying", package=PACKAGE_NAME))
         if self.adb.get_current_package() != PACKAGE_NAME:
-             self.log("🚀 Juego no detectado en primer plano. Lanzando...")
+             self.log(t("log_game_launching"))
              self.adb.start_app(PACKAGE_NAME)
              
              # Esperar a que abra
@@ -486,7 +487,7 @@ class RealRacingBot:
                  time.sleep(1)
                  if self.adb.get_current_package() == PACKAGE_NAME:
                      game_open = True
-                     self.log("✅ Juego detectado en primer plano.")
+                     self.log(t("log_game_detected"))
                      break
             
              if not game_open:
@@ -496,7 +497,7 @@ class RealRacingBot:
                  self.adb._run_command(["am", "start", "-n", f"{PACKAGE_NAME}/.MainActivity"])
                  time.sleep(5)
         else:
-             self.log("✅ Juego ya estaba abierto. Continuando...")
+             self.log(t("log_game_already_open"))
              
         time.sleep(2) # Estabilización
         
@@ -517,7 +518,7 @@ class RealRacingBot:
             if not self.adb.is_connected():
                 current_time = time.time()
                 if current_time - last_disconnect_log > 10:
-                    self.log("🔌 Dispositivo DESCONECTADO. Pausando bot...")
+                    self.log(t("log_device_disconnected"))
                     last_disconnect_log = current_time
                 time.sleep(5)
                 continue
@@ -544,7 +545,7 @@ class RealRacingBot:
         
         # Log de transicion visual
         if self.state != self.last_state:
-            self.log(f"🔄 CAMBIO ESTADO: {self.last_state.name if self.last_state else 'None'} -> {self.state.name}")
+            self.log(t("log_state_change", from_state=self.last_state.name if self.last_state else 'None', to_state=self.state.name))
             self.last_state = self.state
 
         # 0. Chequeo de Contexto Global (Rescue) - Excepto si estamos cambiando zona
