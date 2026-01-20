@@ -12,8 +12,9 @@
 
 [English](#-features) • [Español](#-características)
 
-<img src="docs/screenshot.png" alt="RR3 Bot Lite Screenshot" width="600">
-
+<img src="docs/main.png" alt="RR3 Bot Lite Screenshot" width="600">
+<img src="docs/chart.png" alt="RR3 Bot Lite Screenshot" width="600">
+<img src="docs/calendar.png" alt="RR3 Bot Lite Screenshot" width="600">
 </div>
 
 ---
