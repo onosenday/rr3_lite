@@ -52,12 +52,9 @@ echo.
 echo [INFO] Compilando aplicacion...
 echo.
 
-REM NOTA: Para usar icono, convertir app_logo.png a app_logo.ico
-REM       PyInstaller en Windows requiere formato .ico
-REM       Herramienta online: https://convertio.co/png-ico/
-
 pyinstaller --noconfirm --onedir --windowed ^
     --name "RR3BotLite" ^
+    --icon "src\assets\app_logo.ico" ^
     --add-data "src\assets;assets" ^
     --add-data "src\lang;lang" ^
     --hidden-import "PIL._tkinter_finder" ^
