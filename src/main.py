@@ -5,7 +5,12 @@ import datetime
 import random
 import cv2
 # pyautogui removed
-from config import *
+from config import (PACKAGE_NAME, ASSETS_DIR, COIN_ICON_TEMPLATE, AD_CONFIRM_TEMPLATE,
+                    AD_CLOSE_TEMPLATE, AD_RESUME_TEMPLATE, AD_FAST_FORWARD_TEMPLATE,
+                    NO_MORE_GOLD_TEMPLATE, INTERMEDIATE_TEMPLATE, SEARCH_ICON_TEMPLATE,
+                    WEB_BAR_CLOSE_TEMPLATE, REWARD_CLOSE_TEMPLATES, LOBBY_TEMPLATE_1,
+                    LOBBY_TEMPLATE_2, MATCH_THRESHOLD, ALL_ZONES, SHIFTS,
+                    ZONE_NIUE, ZONE_MADRID, ZONE_KIRITIMATI)
 from adb_wrapper import ADBWrapper
 from vision import Vision
 from ocr import OCR
@@ -406,24 +411,78 @@ class RealRacingBot:
         
     def check_device_timezone(self):
         """
-        Consulta la zona horaria del dispositivo usando ADB shell date.
-        Retorna: 'MADRID', 'KIRITIMATI' o 'UNKNOWN'.
+        Detecta zona horaria usando getprop persist.sys.timezone.
+        Itera ALL_ZONES para encontrar coincidencia.
+        Retorna: 'NIUE', 'MADRID', 'KIRITIMATI' o 'UNKNOWN'.
         """
-        output = self.adb._run_command(["date"])
-        # output example: "Tue Dec 16 18:15:00 GMT+01:00 2025" or "CET"
-        # output example: "Wed Dec 17 07:15:00 +14 2025"
+        output = self.adb._run_command(["getprop", "persist.sys.timezone"])
         
-        if not output: return "UNKNOWN"
+        if not output:
+            return "UNKNOWN"
         
-        # Kiribati: Usually +14
-        if "+14" in output:
-            return "KIRITIMATI"
+        tz_id = output.strip().upper()
         
-        # Madrid: Usually GMT+1, GMT+2, CET, CEST
-        if "GMT+01" in output or "GMT+02" in output or "CET" in output or "CEST" in output:
-            return "MADRID"
-            
+        for zone in ALL_ZONES:
+            # Extraer nombre clave del tz_id (ej: "NIUE" de "Pacific/Niue")
+            zone_key = zone["tz_id"].split("/")[-1].upper()
+            if zone_key in tz_id:
+                return zone["name"]
+        
         return "UNKNOWN"
+
+    def get_current_zones(self):
+        """
+        Devuelve (home_zone, recharge_zone) para la hora actual.
+        Itera SHIFTS comparando hour con start/end.
+        """
+        hour = datetime.datetime.now().hour
+        
+        for shift in SHIFTS:
+            start = shift["start"]
+            end = shift["end"]
+            
+            # Caso especial: end=0 significa medianoche (hora >= start)
+            if end == 0:
+                if hour >= start:
+                    return (shift["home"], shift["recharge"])
+            else:
+                if start <= hour < end:
+                    return (shift["home"], shift["recharge"])
+        
+        # Fallback (no debería llegar aquí)
+        return (ZONE_MADRID, ZONE_KIRITIMATI)
+
+    def is_in_home_zone(self):
+        """
+        ¿Estamos en la zona HOME del turno actual?
+        Usa .upper() para comparación case-insensitive.
+        """
+        home, _ = self.get_current_zones()
+        return self.current_timezone_state.upper() == home["name"].upper()
+
+    def force_shift_transition(self):
+        """
+        Fuerza transición al HOME del turno actual.
+        Reutiliza el flujo normal de cambio de zona.
+        """
+        home, _ = self.get_current_zones()
+        self.log(f"🔄 Transición de turno: Viajando a {home['name']}")
+        self.state_data["target_zone"] = home["name"]
+        self.state = BotState.TZ_INIT
+
+    def verify_and_fix_zone(self):
+        """
+        Verifica zona. Si no estamos en HOME, inicia viaje.
+        Retorna True si podemos actuar, False si hay que esperar.
+        """
+        if self.is_in_home_zone():
+            return True
+        
+        # No estamos en HOME → Forzar viaje
+        home, _ = self.get_current_zones()
+        self.log(f"⚠ Zona actual '{self.current_timezone_state}' ≠ HOME '{home['name']}'")
+        self.force_shift_transition()
+        return False
 
     def ensure_game_context(self):
         """
@@ -506,11 +565,23 @@ class RealRacingBot:
         if current_tz != "UNKNOWN":
             self.current_timezone_state = current_tz
         self.log(f"Estado Inicial Zona: {self.current_timezone_state}")
-
-        # Initialize state machine
-        self.state = BotState.UNKNOWN
+        
+        # Verificar turno DAY/NIGHT y zona correcta
+        home, recharge = self.get_current_zones()
+        self.log(f"🌙 Turno actual: HOME={home['name']}, RECHARGE={recharge['name']}")
+        
+        if self.current_timezone_state.upper() != home["name"].upper():
+            self.log(f"🚀 Arranque: {self.current_timezone_state} ≠ HOME {home['name']}. Forzando viaje.")
+            self.state_data["target_zone"] = home["name"]
+            self.state_data["zone_config"] = home
+            self.state = BotState.TZ_INIT
+        else:
+            self.log(f"✅ Arranque: Ya en HOME {home['name']}")
+            self.state = BotState.UNKNOWN
+        
         self.last_state = None
-        self.state_data = {}
+        self.state_data.setdefault("target_zone", None)
+        self.state_data.setdefault("zone_config", None)
 
         last_disconnect_log = 0
         while not self.is_stopped():
@@ -603,26 +674,9 @@ class RealRacingBot:
         # 4. Moneda Normal
         match_coin = self._find_template_with_memory(screenshot, COIN_ICON_TEMPLATE, "tmpl_coin_icon")
         if match_coin:
-             # OPTIMIZATION: Check internal timezone state first before costly ADB call
-             # Only verify physically if we think we aren't in Madrid but see a coin (anomaly?)
-             # OR if we don't know where we are.
-             if self.current_timezone_state == "UNKNOWN":
-                 real_tz = self.check_device_timezone()
-                 self.current_timezone_state = real_tz
-             
-             # Safety: If we think we are in KIRITIMATI but see a coin, maybe we should double check?
-             # For speed, strictly trust internal state unless UNKNOWN.
-             if self.current_timezone_state != "MADRID":
-                  # Verification only if we suspect mismatch
-                  self.log(f"⚠ Moneda visible pero Estado TZ es '{self.current_timezone_state}'. Verificando...")
-                  real_tz = self.check_device_timezone()
-                  if real_tz != "MADRID":
-                      self.log(f"⚠ Confirmado: Zona es '{real_tz}'. Forzando cambio a MADRID...")
-                      self.state_data["target_zone"] = "MADRID"
-                      self.state = BotState.TZ_INIT
-                      return
-                  else:
-                      self.current_timezone_state = "MADRID" # Fix state
+             # VERIFICACIÓN DAY/NIGHT: ¿Estamos en la zona HOME del turno actual?
+             if not self.verify_and_fix_zone():
+                  return  # Se inició viaje a HOME, esperar
              
              # Click en moneda
              self.interact_with_coin(screenshot, match_coin)
@@ -982,21 +1036,24 @@ class RealRacingBot:
     def handle_timezone_sequence(self, screenshot):
         """Sub-máquina para Timezone."""
         if self.state == BotState.TZ_INIT:
-             # Refresh timezone real ONLY if needed or periodically?
+             # Refresh timezone real ONLY if needed
              if self.current_timezone_state == "UNKNOWN":
                  real_tz = self.check_device_timezone()
                  if real_tz != "UNKNOWN":
                      self.current_timezone_state = real_tz
              
-             # Toggle simple entre MADRID y KIRITIMATI
-             current = self.current_timezone_state
-             if current == "MADRID":
-                 target = "KIRITIMATI"
-             else:
-                 target = "MADRID"
+             # Toggle dinámico basado en turno actual
+             home, recharge = self.get_current_zones()
+             current = self.current_timezone_state.upper()
              
-             self.state_data["target_zone"] = target
-             self.log(f"Iniciando secuencia TZ hacia: {target}")
+             if current == home["name"].upper():
+                 target = recharge  # Estamos en home, ir a recharge
+             else:
+                 target = home      # No estamos en home, ir a home
+             
+             self.state_data["target_zone"] = target["name"]
+             self.state_data["zone_config"] = target  # Guardar config completa
+             self.log(f"Turno actual: {home['name']}->{recharge['name']}. Viajando a: {target['name']}")
 
              self.log("Abriendo Configuración de Fecha...")
              self.adb._run_command(["am", "start", "-a", "android.settings.DATE_SETTINGS"])
@@ -1052,10 +1109,14 @@ class RealRacingBot:
                      time.sleep(0.5)
                  
         elif self.state == BotState.TZ_INPUT_SEARCH:
-             target = self.state_data["target_zone"]
+             zone_config = self.state_data.get("zone_config")
+             if not zone_config:
+                 # Fallback: buscar config por nombre
+                 target_name = self.state_data["target_zone"]
+                 zone_config = next((z for z in ALL_ZONES if z["name"] == target_name), ZONE_MADRID)
+                 self.state_data["zone_config"] = zone_config
              
-             term = "Espa" # Default Madrid
-             if target == "KIRITIMATI": term = "Kiribati"
+             term = zone_config["search_input"]
              
              self.log(f"Buscando lupa para: {term}")
              time.sleep(0.5) # Reduced from 1.0s
@@ -1109,22 +1170,30 @@ class RealRacingBot:
              self.state = BotState.TZ_SELECT_COUNTRY
              
         elif self.state == BotState.TZ_SELECT_COUNTRY:
-             target = self.state_data["target_zone"]
-             term = "Espa"
-             if target == "KIRITIMATI": term = "Kiribati"
+             zone_config = self.state_data.get("zone_config")
+             # Usar search_input (parcial: "Espa") para búsqueda, igual que código original
+             term = zone_config["search_input"] if zone_config else "Espa"
              
              if self._wait_click_country_result(term):
                  self.log(f"País {term} seleccionado.")
-                 self.state = BotState.TZ_SELECT_CITY
+                 # Si needs_city=False (Niue), saltar directamente a TZ_RETURN_GAME
+                 if zone_config and not zone_config.get("needs_city", True):
+                     self.log(f"Zona {zone_config['name']} no requiere ciudad. Completado.")
+                     self.current_timezone_state = zone_config["name"]
+                     self.state = BotState.TZ_RETURN_GAME
+                 else:
+                     self.state = BotState.TZ_SELECT_CITY
              else:
                  self.log("No encontré país. Reintentando...")
                  self.state = BotState.GAME_LOBBY
                  
         elif self.state == BotState.TZ_SELECT_CITY:
-             target = self.state_data["target_zone"]
+             zone_config = self.state_data.get("zone_config")
+             if not zone_config:
+                 target_name = self.state_data["target_zone"]
+                 zone_config = next((z for z in ALL_ZONES if z["name"] == target_name), ZONE_MADRID)
              
-             city = "Madrid"
-             if target == "KIRITIMATI": city = "Kiritimati"
+             city = zone_config.get("city_match", "Madrid")
              memory_key = f"tz_city_{city.lower()}"
              
              # Smart Retry Init
@@ -1175,7 +1244,7 @@ class RealRacingBot:
                          
                          self.device_tap(final_x, final_y)
                          # Skip to Verification
-                         self.current_timezone_state = target
+                         self.current_timezone_state = zone_config["name"]
                          # Refactored verification (removed phantom call wait_return_to_settings)
                          self.logger.save_ocr_memory(memory_key, city, mx, my, mw, mh, 0) # Confirmamos memoria
                          # For now, duplicate logic or let it flow?
@@ -1228,7 +1297,7 @@ class RealRacingBot:
                  # SOLO si funciona (lo hacemos tras verificacion), pero aqui guardamos provisionalmente
                  # para validacion. Si falla, borraremos.
                  
-                 self.current_timezone_state = target
+                 self.current_timezone_state = zone_config["name"]
                  
                  # VERIFICACIÓN DE RETORNO A "SELECCIONAR ZONA HORARIA"
                  if self.verify_return_to_settings():

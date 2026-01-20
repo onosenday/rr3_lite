@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from adb_wrapper import ADBWrapper
 from logger import GoldLogger
 from i18n import t, get_current_language, set_language, get_supported_languages, get_language_name, register_language_change_callback
+from config import SHIFTS
 
 
 # Importamos la clase del bot (que refactorizaremos en breve)
@@ -138,6 +139,41 @@ class BotGUI:
             pass
         self.root.after(30000, self._schedule_device_status_update)
 
+    def _update_shift_indicator(self):
+        """Actualiza el indicador de turno DAY/NIGHT cada 60s."""
+        try:
+            hour = datetime.now().hour
+            for shift in SHIFTS:
+                start = shift["start"]
+                end = shift["end"]
+                
+                if end == 0:
+                    if hour >= start:
+                        shift_name = shift["name"]
+                        home_name = shift["home"]["name"]
+                        break
+                else:
+                    if start <= hour < end:
+                        shift_name = shift["name"]
+                        home_name = shift["home"]["name"]
+                        break
+            else:
+                shift_name = "?"
+                home_name = "?"
+            
+            # Color según turno
+            if shift_name == "NIGHT":
+                color = "#9F7AEA"  # Purple for night
+                icon = "🌙"
+            else:
+                color = "#F6E05E"  # Yellow for day
+                icon = "☀️"
+            
+            self.lbl_shift.config(text=f"{icon} {shift_name} ({home_name})", fg=color)
+        except:
+            pass
+        self.root.after(60000, self._update_shift_indicator)
+
     def _apply_theme(self):
         style = ttk.Style()
         style.theme_use('clam')
@@ -242,6 +278,16 @@ class BotGUI:
         self.lbl_brightness.pack(side=tk.LEFT)
         
         self._schedule_device_status_update()
+        
+        # SHIFT INDICATOR ROW (debajo de batería/wifi/brillo)
+        self.shift_row = tk.Frame(left_panel, bg="#1E3246")
+        self.shift_row.pack(anchor=tk.W, pady=(0, 15))
+        
+        self.lbl_shift_label = tk.Label(self.shift_row, text="Turno: ", fg="#829AB1", bg="#1E3246", font=("Segoe UI", 9))
+        self.lbl_shift_label.pack(side=tk.LEFT)
+        self.lbl_shift = tk.Label(self.shift_row, text="--", fg="#A0AEC0", bg="#1E3246", font=("Segoe UI", 9, "bold"))
+        self.lbl_shift.pack(side=tk.LEFT)
+        self._update_shift_indicator()
 
         # LANGUAGE SELECTOR
         self.lang_frame = tk.Frame(left_panel, bg="#1E3246")

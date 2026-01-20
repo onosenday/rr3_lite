@@ -30,14 +30,43 @@ LOBBY_TEMPLATE_2 = "lobby_asset_2.png"
 # REMOVED: Ya no usamos desktop_tap, usamos ADB directo.
 # DESKTOP_CALIBRATION = {"x1": 0, "y1": 0, "x2": 0, "y2": 0, "enabled": False}
 
-# Zonas Horarias
-# Nota: Estas son para referencia o logs, ya que el cambio se hará por UI.
-TIMEZONE_KIRITIMATI = "Pacific/Kiritimati" # UTC+14
-TIMEZONE_MADRID = "Europe/Madrid"     # UTC+1/UTC+2
+# Zonas Horarias - Configuración completa para Day/Night
+ZONE_NIUE = {
+    "name": "NIUE",
+    "tz_id": "Pacific/Niue",
+    "search_input": "Niue",
+    "ocr_match": "Niue",
+    "needs_city": False,
+}
 
-# Horario de ejecución (Hora local del PC)
-START_HOUR = 12 # 12 pm
-END_HOUR = 24   # 12 am (00:00 del día siguiente)
+ZONE_MADRID = {
+    "name": "MADRID",
+    "tz_id": "Europe/Madrid",
+    "search_input": "Espa",
+    "ocr_match": "España",
+    "needs_city": True,
+    "city_search": "Madrid",
+    "city_match": "Madrid",
+}
+
+ZONE_KIRITIMATI = {
+    "name": "KIRITIMATI",
+    "tz_id": "Pacific/Kiritimati",
+    "search_input": "Kiribati",
+    "ocr_match": "Kiribati",
+    "needs_city": True,
+    "city_search": "Kiritimati",
+    "city_match": "Kiritimati",
+}
+
+ALL_ZONES = [ZONE_NIUE, ZONE_MADRID, ZONE_KIRITIMATI]
+
+# Turnos - Day/Night
+SHIFT_NIGHT = {"name": "NIGHT", "start": 0, "end": 12, "home": ZONE_NIUE, "recharge": ZONE_MADRID}
+SHIFT_DAY = {"name": "DAY", "start": 12, "end": 0, "home": ZONE_MADRID, "recharge": ZONE_KIRITIMATI}
+
+SHIFTS = [SHIFT_NIGHT, SHIFT_DAY]
 
 # Umbral de confianza para la detección de imágenes (0 a 1)
 MATCH_THRESHOLD = 0.8
+
