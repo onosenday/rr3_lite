@@ -24,6 +24,15 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM Verificar Tesseract
+tesseract --version >nul 2>&1
+if errorlevel 1 (
+    echo [AVISO] Tesseract OCR no encontrado en PATH.
+    echo         Descarga: https://github.com/UB-Mannheim/tesseract/wiki
+    echo         Anade al PATH: C:\Program Files\Tesseract-OCR
+    echo.
+)
+
 REM Crear venv si no existe
 if not exist "venv" (
     echo [INFO] Creando entorno virtual...

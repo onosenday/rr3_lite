@@ -52,17 +52,25 @@ RR3 Bot Lite is an automation tool that **watches ads for you** in Real Racing 3
 
 ### Prerequisites
 - Python 3.10+
-- ADB (Android Debug Bridge)
 - Tesseract OCR
 - Android device with USB debugging enabled
 
+> **Note:** ADB is automatically managed by the `adbutils` library.
+
+### Windows - Tesseract Installation
+1. Download installer from [UB-Mannheim/tesseract](https://github.com/UB-Mannheim/tesseract/wiki)
+2. Run installer (default path: `C:\Program Files\Tesseract-OCR`)
+3. Add to PATH: `System Properties → Environment Variables → Path → Add: C:\Program Files\Tesseract-OCR`
+4. Verify: `tesseract --version` in CMD
+
 ### Linux
 ```bash
+sudo apt install tesseract-ocr  # Ubuntu/Debian
 chmod +x run.sh
 ./run.sh
 ```
 
-### Windows
+### Windows - Build
 ```cmd
 build.bat
 ```
@@ -137,17 +145,25 @@ RR3 Bot Lite es una herramienta de automatización que **ve anuncios por ti** en
 
 ### Requisitos
 - Python 3.10+
-- ADB (Android Debug Bridge)
 - Tesseract OCR
 - Dispositivo Android con depuración USB habilitada
 
+> **Nota:** ADB se gestiona automáticamente por la librería `adbutils`.
+
+### Windows - Instalación de Tesseract
+1. Descarga el instalador de [UB-Mannheim/tesseract](https://github.com/UB-Mannheim/tesseract/wiki)
+2. Ejecuta el instalador (ruta por defecto: `C:\Program Files\Tesseract-OCR`)
+3. Añade al PATH: `Propiedades del Sistema → Variables de Entorno → Path → Añadir: C:\Program Files\Tesseract-OCR`
+4. Verifica: `tesseract --version` en CMD
+
 ### Linux
 ```bash
+sudo apt install tesseract-ocr  # Ubuntu/Debian
 chmod +x run.sh
 ./run.sh
 ```
 
-### Windows
+### Windows - Compilar
 ```cmd
 build.bat
 ```
