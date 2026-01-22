@@ -70,3 +70,7 @@ SHIFTS = [SHIFT_NIGHT, SHIFT_DAY]
 # Umbral de confianza para la detección de imágenes (0 a 1)
 MATCH_THRESHOLD = 0.8
 
+
+# Versión y Actualizaciones
+BOT_VERSION = "1.3.1"
+VERSION_CHECK_URL = "https://raw.githubusercontent.com/onosenday/rr3_lite/main/CHANGELOG.md"

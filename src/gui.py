@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from adb_wrapper import ADBWrapper
 from logger import GoldLogger
 from i18n import t, get_current_language, set_language, get_supported_languages, get_language_name, register_language_change_callback
-from config import SHIFTS
+from config import SHIFTS, BOT_VERSION, VERSION_CHECK_URL
 
 
 # Importamos la clase del bot (que refactorizaremos en breve)
@@ -74,6 +74,10 @@ class BotGUI:
         # Hilo de preview constante
         self.preview_thread = threading.Thread(target=self._run_idle_preview, daemon=True)
         self.preview_thread.start()
+        
+        # Check Updates Thread
+        threading.Thread(target=self._check_for_updates, daemon=True).start()
+        
         
         # Overlay Drawing State
         self.current_pil_image = None
@@ -248,6 +252,15 @@ class BotGUI:
             
         self.lbl_header = ttk.Label(header_frame, text=t("header_title"), style="Header.TLabel", justify=tk.LEFT)
         self.lbl_header.pack(side=tk.LEFT)
+        
+        # VERSION / UPDATE LABEL
+        self.lbl_version = tk.Label(header_frame, text=f"v{BOT_VERSION}", fg="#4A5568", bg="#1E3246", font=("Segoe UI", 8))
+        self.lbl_version.pack(side=tk.LEFT, padx=(5,0), anchor=tk.S)
+        
+        # UPDATE ALERT (Initially Hidden)
+        self.lbl_update = tk.Label(left_panel, text="", bg="#FC8181", fg="white", font=("Segoe UI", 9, "bold"), padx=5, pady=2)
+        # self.lbl_update.pack(...) only when update found
+        
         
         # DEVICE STATUS ROW (Battery, WiFi, Brightness)
         self.status_row = tk.Frame(left_panel, bg="#1E3246")
@@ -798,6 +811,51 @@ class BotGUI:
         # Canvas
         cw, ch = 550, 320
         canvas = tk.Canvas(popup, width=cw, height=ch, bg="#1E3246", highlightthickness=0)
+    
+    def _check_for_updates(self):
+        """Checks GitHub for a new version in a separate thread."""
+        try:
+            import requests
+            import re
+            
+            print(f"DEBUG: Checking for updates at {VERSION_CHECK_URL}")
+            response = requests.get(VERSION_CHECK_URL, timeout=10)
+            
+            if response.status_code == 200:
+                content = response.text
+                # Find first occurrence of ## [x.y.z]
+                match = re.search(r"## \[(\d+\.\d+\.\d+)\]", content)
+                if match:
+                    remote_version = match.group(1)
+                    print(f"DEBUG: Remote Version: {remote_version}, Local: {BOT_VERSION}")
+                    
+                    if self._compare_versions(remote_version, BOT_VERSION) > 0:
+                        self.root.after(0, lambda: self._show_update_available(remote_version))
+        except Exception as e:
+            print(f"Update check failed: {e}")
+
+    def _compare_versions(self, v1, v2):
+        """Returns 1 if v1 > v2, -1 if v1 < v2, 0 if equal."""
+        def normalize(v):
+            return [int(x) for x in v.split(".")]
+        return (normalize(v1) > normalize(v2)) - (normalize(v1) < normalize(v2))
+
+    def _show_update_available(self, new_version):
+        """Shows the update banner."""
+        try:
+            msg = f"⚠ Update v{new_version} Available!"
+            self.lbl_update.config(text=msg, cursor="hand2")
+            self.lbl_update.pack(anchor=tk.W, pady=(0, 10), fill=tk.X)
+            
+            # Click to open release page (optional)
+            def open_url(event):
+                import webbrowser
+                webbrowser.open("https://github.com/onosenday/rr3_lite/releases")
+            
+            self.lbl_update.bind("<Button-1>", open_url)
+        except:
+            pass
+
         canvas.pack(pady=10, padx=20)
         
         def navigate(delta):

@@ -1,0 +1,10 @@
+La dirección del repositorio remoto es https://github.com/onosenday/rr3_lite.git
+
+NUNCA debes subir a github los siguientes archivos, aunque no estén incluídos en el .gitignore:
+
+- .agent/
+- .vscode/
+- .env
+- .agent/
+- todo.md
+- repository_description.md
