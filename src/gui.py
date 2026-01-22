@@ -104,6 +104,31 @@ class BotGUI:
         
         # Click Visualization
         self.active_clicks = [] # Stores (x, y, timestamp)
+        
+        # Cleanup on exit
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _on_close(self):
+        """Cleanup resources on window close."""
+        print("Cerrando aplicación y liberando recursos ADB...")
+        try:
+            if self.is_bot_running:
+                self.stop_bot()
+            
+            # Cerrar conexión ADB de la GUI
+            if self.adb_preview:
+                self.adb_preview.close()
+                
+            # Matar servidor ADB si se desea limpieza agresiva (opcional, para liberar memoria real)
+            # import adbutils
+            # try: adbutils.adb.server_kill()
+            # except: pass
+            
+        except Exception as e:
+            print(f"Error cleanup: {e}")
+        finally:
+            self.root.destroy()
+
 
     def _schedule_device_status_update(self):
         """Actualiza estado de batería, WiFi y brillo cada 30s."""

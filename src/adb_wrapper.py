@@ -260,4 +260,15 @@ class ADBWrapper:
             self.enable_wifi()
             return True
         return False
+        
+    def close(self):
+        """Cierra la conexión con el servidor ADB y libera recursos."""
+        try:
+            if self.device:
+                self.device = None
+            # Opcional: Matar el servidor ADB si se desea limpieza total
+            # adbutils.adb.server_kill() 
+        except:
+            pass
+
 
