@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-01-22
+
+### Added
+- **STUCK_AD State**: New dedicated recovery state when the bot gets stuck in an ad after timeout.
+- **Corner Change Detection**: New `detect_corner_changes()` function in `vision.py` to detect when something appears in screen corners.
+- **Enhanced FF Templates**: `generate_ff_templates()` now generates multiple variants:
+  - `>>` simple (without bar)
+  - `>>|` with vertical bar
+  - Filled and outline versions
+  - Multiple line thicknesses
+  - Inverted versions (black/white)
+- **Escape Sequence**: Post-timeout escape sequence: BACK x2 → HOME → return to game.
+- **Corner Change Boost**: When corner changes are detected, FF detection requires only 2 frames instead of 3.
+
+### Changed
+- **FF Detection Threshold**: Reduced from 0.70 to 0.60 for more tolerance.
+- **FF Persistence**: Increased from 2 to 3 frames (compensates for lower threshold).
+- **Timeout Recovery**: No longer assumes GAME_LOBBY without positive anchor confirmation.
+
+### Fixed
+- **False GAME_LOBBY Transitions**: Bot no longer incorrectly transitions to GAME_LOBBY when still stuck in an ad.
+
 ## [1.2.0] - 2026-01-18
 
 ### Added

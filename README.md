@@ -44,6 +44,7 @@ RR3 Bot Lite is an automation tool that **watches ads for you** in Real Racing 3
 | Historical earnings log | ✅ |
 | Calendar & charts | ✅ |
 | Multi-language UI | ✅ |
+| Smart recovery (STUCK_AD) | ✅ |
 | ML/AI components | ❌ (lite version) |
 
 ---
@@ -137,6 +138,7 @@ RR3 Bot Lite es una herramienta de automatización que **ve anuncios por ti** en
 | Registro histórico de ganancias | ✅ |
 | Calendario y gráficos | ✅ |
 | Interfaz multi-idioma | ✅ |
+| Recuperación inteligente (STUCK_AD) | ✅ |
 | Componentes ML/AI | ❌ (versión lite) |
 
 ---
