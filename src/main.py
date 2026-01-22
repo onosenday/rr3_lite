@@ -24,6 +24,7 @@ class BotState(Enum):
     AD_INTERMEDIATE = auto()
     AD_WATCHING = auto()
     REWARD_SCREEN = auto()
+    STUCK_AD = auto()  # Nuevo: Atrapado en anuncio, intentando escapar
     
     TZ_INIT = auto()
     TZ_OPEN_SETTINGS = auto()
@@ -636,6 +637,8 @@ class RealRacingBot:
             self.handle_ad_watching() # Own loop
         elif self.state == BotState.REWARD_SCREEN:
             self.handle_reward_screen_state(self.current_screenshot)
+        elif self.state == BotState.STUCK_AD:
+            self.handle_stuck_ad()
         elif "TZ_" in self.state.name:
             self.handle_timezone_sequence(self.current_screenshot)
 
@@ -645,6 +648,46 @@ class RealRacingBot:
         # Por defecto asumimos Lobby si el juego está abierto
         self.log("Estado UNKNOWN -> Asumiendo GAME_LOBBY...")
         self.state = BotState.GAME_LOBBY
+
+    def handle_stuck_ad(self):
+        """
+        Estado de recuperación cuando el bot se queda atrapado en un anuncio.
+        Intenta escapar usando HOME + volver al juego.
+        Solo transiciona a GAME_LOBBY si confirma anchors positivamente.
+        """
+        # Inicializar contador si no existe
+        if not hasattr(self, 'stuck_ad_attempts'):
+            self.stuck_ad_attempts = 0
+        
+        self.stuck_ad_attempts += 1
+        self.log(f"🔄 STUCK_AD: Intento de escapada {self.stuck_ad_attempts}/5...")
+        
+        # Secuencia de escapada: HOME + volver al juego
+        self.adb.input_keyevent(3)  # HOME
+        time.sleep(1.0)
+        self.adb.start_app(PACKAGE_NAME)
+        time.sleep(3.0)
+        
+        # Verificar si escapamos
+        screenshot = self.adb.take_screenshot()
+        self.update_live_view(screenshot)
+        
+        if self.check_lobby_anchors(screenshot):
+            self.log("✅ Escapada exitosa. Volviendo a GAME_LOBBY.")
+            self.stuck_ad_attempts = 0  # Reset
+            self.state = BotState.GAME_LOBBY
+            return
+        
+        # Verificar máximo intentos
+        if self.stuck_ad_attempts >= 5:
+            self.log("❌ Máximo intentos de escapada alcanzado. Esperando 30s antes de reintentar...")
+            self.stuck_ad_attempts = 0  # Reset para nuevo ciclo
+            time.sleep(30)  # Pausa larga antes de reintentar
+        else:
+            self.log(f"⚠️ Escapada fallida. Reintentando en 5s...")
+            time.sleep(5)
+        
+        # Permanecer en STUCK_AD para seguir intentando
 
     def handle_game_lobby(self, screenshot):
         """
@@ -735,6 +778,7 @@ class RealRacingBot:
         Transitions:
         -> REWARD_SCREEN (X cerrada, >> cerrado)
         -> GAME_LOBBY (Web back, Survey skip)
+        -> STUCK_AD (Timeout sin poder salir)
         """
         # La lógica de process_active_ad era bloqueante (while loop).
         # Para la máquina de estados, deberíamos hacerla no bloqueante o mantener el while dentro 
@@ -749,9 +793,13 @@ class RealRacingBot:
              self.state = BotState.REWARD_SCREEN
         elif result == "LOBBY":
              self.state = BotState.GAME_LOBBY
+        elif result == "STUCK_AD":
+             self.log("⚠️ Transición a STUCK_AD para intentar recuperación...")
+             self.state = BotState.STUCK_AD
         else:
-             self.log("Resultado Ad Watching incierto. Estado -> UNKNOWN")
-             self.state = BotState.UNKNOWN
+             # Fallback: Si retorna algo inesperado, también ir a STUCK_AD
+             self.log(f"Resultado Ad Watching inesperado: {result}. Estado -> STUCK_AD")
+             self.state = BotState.STUCK_AD
 
     def check_lobby_anchors(self, screenshot):
         """
@@ -792,11 +840,13 @@ class RealRacingBot:
         
         # Variables Loop Seguridad
         last_gray = None
+        last_screenshot_for_corners = None  # Para detección de cambio en esquinas
         stall_counter = 0
         black_screen_counter = 0
         
         focus_recovery_attempts = 0
         ff_persistence_counter = 0
+        corner_change_boost = False  # Si detectamos cambio en esquinas, buscar más agresivamente
         
         while time.time() - start_wait < 150: # Timeout
             if self.is_stopped(): return "LOBBY"
@@ -827,6 +877,15 @@ class RealRacingBot:
             
             screenshot = self.adb.take_screenshot()
             self.update_live_view(screenshot)
+
+            # --- DETECCIÓN DE CAMBIO EN ESQUINAS (1.E) ---
+            if last_screenshot_for_corners is not None:
+                changed_corners = self.vision.detect_corner_changes(last_screenshot_for_corners, screenshot)
+                if changed_corners:
+                    self.log(f"🔍 Cambio detectado en esquinas: {changed_corners}. Activando búsqueda intensiva...")
+                    corner_change_boost = True
+            last_screenshot_for_corners = screenshot.copy() if screenshot is not None else None
+            # -----------------------------------------------
 
             # --- ANCHOR CHECK (LOBBY SAFETY) ---
             if self.check_lobby_anchors(screenshot):
@@ -891,9 +950,12 @@ class RealRacingBot:
             match_ff = self.vision.find_fast_forward_button(screenshot)
             if match_ff:
                  ff_persistence_counter += 1
-                 self.log(f"Fast Forward detectado ({ff_persistence_counter}/2)...")
                  
-                 if ff_persistence_counter >= 2:
+                 # Si detectamos cambio en esquinas, reducir persistencia requerida
+                 required_persistence = 2 if corner_change_boost else 3
+                 self.log(f"Fast Forward detectado ({ff_persistence_counter}/{required_persistence})...")
+                 
+                 if ff_persistence_counter >= required_persistence:
                      self.log("Fast Forward CONFIRMADO. Click.")
                      # Usar offset aleatorio pequeño para evitar "píxel muerto" o detección de bot
                      import random
@@ -906,8 +968,9 @@ class RealRacingBot:
                      # Click con duración explícita (0.15s) para asegurar registro
                      self.device_tap(ff_x + off_x, ff_y + off_y, duration=0.15)
                      
-                     ff_persistence_counter = 0 # Reset
-                     time.sleep(2.0) # Aumentar espera post-click
+                     ff_persistence_counter = 0  # Reset
+                     corner_change_boost = False  # Reset boost
+                     time.sleep(2.0)  # Aumentar espera post-click
                      continue
             else:
                  ff_persistence_counter = 0 # Reset si se pierde un frame
@@ -950,19 +1013,38 @@ class RealRacingBot:
 
             time.sleep(1.5)
             
-        self.log("Timeout viendo anuncio. Intentando salir con BACK...")
-        self.adb.input_keyevent(4) # Back
+        # ===== SECUENCIA DE ESCAPADA POST-TIMEOUT =====
+        self.log("⏰ Timeout viendo anuncio. Iniciando secuencia de escapada...")
+        
+        # Paso 1: BACK x2
+        self.log("Paso 1/3: Intentando BACK x2...")
+        self.adb.input_keyevent(4)  # Back 1
+        time.sleep(0.5)
+        self.adb.input_keyevent(4)  # Back 2
         time.sleep(2.0)
         
-        # Verify if we managed to exit
         scr = self.adb.take_screenshot()
         self.update_live_view(scr)
         if self.check_lobby_anchors(scr):
-             self.log("Recuperado a Lobby exitosamente.")
+             self.log("✅ Escapada exitosa con BACK x2.")
              return "LOBBY"
-             
-        self.log("No se detectó Lobby tras Timeout. Estado -> UNKNOWN")
-        return "UNKNOWN"
+        
+        # Paso 2: HOME + volver al juego
+        self.log("Paso 2/3: BACK no funcionó. Intentando HOME + volver al juego...")
+        self.adb.input_keyevent(3)  # HOME
+        time.sleep(1.0)
+        self.adb.start_app(PACKAGE_NAME)
+        time.sleep(3.0)
+        
+        scr = self.adb.take_screenshot()
+        self.update_live_view(scr)
+        if self.check_lobby_anchors(scr):
+             self.log("✅ Escapada exitosa con HOME + juego.")
+             return "LOBBY"
+        
+        # Paso 3: Si aún no estamos en lobby, ir a STUCK_AD
+        self.log("❌ No se detectó Lobby tras escapada. Estado -> STUCK_AD")
+        return "STUCK_AD"
 
     def handle_reward_screen(self, screenshot=None):
         """

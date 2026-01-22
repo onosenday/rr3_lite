@@ -130,50 +130,76 @@ class Vision:
         return templates
 
     def generate_ff_templates(self):
-        """Genera plantillas de Fast Forward (>>) en memoria."""
+        """
+        Genera plantillas de Fast Forward en memoria.
+        Incluye múltiples variantes:
+        - >> simple (sin barra)
+        - >>| con barra vertical
+        - Versiones filled y outline
+        - Distintos grosores
+        - Inversiones (blanco/negro)
+        """
         templates = []
-        # Tamaños típicos (Rango ampliado)
-        for size in range(20, 81, 5):
-            img = np.zeros((size, size), dtype=np.uint8)
-            
-            # Dibujar Triángulo 1
-            # Puntos: (x1,y1), (x1,y2), (x2, y_mid)
-            # Margen 5px
+        
+        # Tamaños típicos
+        for size in range(20, 71, 10):
+            margin = max(3, size // 10)
             mid_y = size // 2
-            margin = 5
-            
             x_start = margin
             x_mid = size // 2
             x_end = size - margin
             
-            # Triangulo Izq
-            # Base a la izquierda, Punta en el centro
+            # ========== VARIANTE 1: >> simple (sin barra) ==========
+            img_simple = np.zeros((size, size), dtype=np.uint8)
+            
+            # Triángulo izquierdo
             pt1 = (x_start, margin)
-            pt2 = (x_start, size-margin)
-            pt3 = (x_mid, mid_y)
-            triangle_cnt1 = np.array( [pt1, pt2, pt3] )
-            cv2.drawContours(img, [triangle_cnt1], 0, 255, -1)
+            pt2 = (x_start, size - margin)
+            pt3 = (x_mid - 2, mid_y)
+            triangle1 = np.array([pt1, pt2, pt3])
+            cv2.drawContours(img_simple, [triangle1], 0, 255, -1)
             
-            # Triangulo Der
-            # Base en el centro (tocando punta de Izq), Punta a la derecha
-            pt4 = (x_mid, margin)
-            pt5 = (x_mid, size-margin)
+            # Triángulo derecho
+            pt4 = (x_mid - 2, margin)
+            pt5 = (x_mid - 2, size - margin)
             pt6 = (x_end, mid_y)
-            triangle_cnt2 = np.array( [pt4, pt5, pt6] )
-            cv2.drawContours(img, [triangle_cnt2], 0, 255, -1)
+            triangle2 = np.array([pt4, pt5, pt6])
+            cv2.drawContours(img_simple, [triangle2], 0, 255, -1)
             
-            # Linea Vertical (Skip)
-            # Toca el vertice del segundo triangulo (x_end)
-            # Grosor proporcional (ej: size//10)
-            line_w = max(2, size // 15)
-            cv2.rectangle(img, (x_end, margin), (x_end + line_w, size-margin), 255, -1)
-
-            templates.append((f"gen_ff_{size}", img))
+            templates.append((f"gen_ff_simple_{size}", img_simple))
+            templates.append((f"gen_ff_simple_inv_{size}", cv2.bitwise_not(img_simple)))
             
-            # Invertido (Negro sobre blanco)
-            img_inv = cv2.bitwise_not(img)
-            templates.append((f"gen_ff_inv_{size}", img_inv))
+            # ========== VARIANTE 2: >>| con barra vertical ==========
+            img_bar = img_simple.copy()
+            line_w = max(2, size // 12)
+            cv2.rectangle(img_bar, (x_end, margin), (x_end + line_w, size - margin), 255, -1)
             
+            templates.append((f"gen_ff_bar_{size}", img_bar))
+            templates.append((f"gen_ff_bar_inv_{size}", cv2.bitwise_not(img_bar)))
+            
+            # ========== VARIANTE 3: >> outline (solo contorno) ==========
+            for thickness in [1, 2, 3]:
+                img_outline = np.zeros((size, size), dtype=np.uint8)
+                
+                # Triángulo 1 outline
+                cv2.drawContours(img_outline, [triangle1], 0, 255, thickness)
+                # Triángulo 2 outline
+                cv2.drawContours(img_outline, [triangle2], 0, 255, thickness)
+                
+                templates.append((f"gen_ff_outline_{size}_t{thickness}", img_outline))
+                templates.append((f"gen_ff_outline_inv_{size}_t{thickness}", cv2.bitwise_not(img_outline)))
+            
+            # ========== VARIANTE 4: >>| outline con barra ==========
+            for thickness in [1, 2]:
+                img_outline_bar = np.zeros((size, size), dtype=np.uint8)
+                cv2.drawContours(img_outline_bar, [triangle1], 0, 255, thickness)
+                cv2.drawContours(img_outline_bar, [triangle2], 0, 255, thickness)
+                # Barra vertical
+                cv2.line(img_outline_bar, (x_end + 2, margin), (x_end + 2, size - margin), 255, thickness)
+                
+                templates.append((f"gen_ff_outline_bar_{size}_t{thickness}", img_outline_bar))
+                templates.append((f"gen_ff_outline_bar_inv_{size}_t{thickness}", cv2.bitwise_not(img_outline_bar)))
+        
         return templates
 
     def find_fast_forward_button(self, image):
@@ -221,7 +247,7 @@ class Vision:
                 res = cv2.matchTemplate(roi_img, tmpl_bgr, cv2.TM_CCOEFF_NORMED)
                 min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
                 
-                if max_val > 0.70:
+                if max_val > 0.60:  # Threshold reducido (persistencia 3 frames compensa)
                     h, w = tmpl_bgr.shape[:2]
                     global_x = x1 + max_loc[0] + w // 2
                     global_y = y1 + max_loc[1] + h // 2
@@ -242,7 +268,7 @@ class Vision:
                 res = cv2.matchTemplate(roi_img, tmpl, cv2.TM_CCOEFF_NORMED)
                 min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
                 
-                if max_val > 0.70: # Threshold AUMENTADO de 0.55 -> 0.70
+                if max_val > 0.60:  # Threshold reducido (persistencia 3 frames compensa)
                     h, w = tmpl.shape[:2]
                     global_x = x1 + max_loc[0] + w // 2
                     global_y = y1 + max_loc[1] + h // 2
@@ -251,11 +277,54 @@ class Vision:
                     
         return None
 
-    def find_fast_forward_button_backup(self, image):
-        # ... Lógica generativa antigua (renombrada) ...
-        # (Resto del código generativo si se quiere conservar como backup, 
-        #  o simplemente eliminarlo para limpieza. Lo eliminaré para simplificar)
-        return None
+    def detect_corner_changes(self, prev_image, curr_image, threshold=0.15):
+        """
+        Detecta cambios significativos en las esquinas SUPERIORES entre dos frames.
+        Útil para detectar cuando aparece un botón (FF/X) que antes no estaba.
+        
+        Args:
+            prev_image: Frame anterior (BGR)
+            curr_image: Frame actual (BGR)
+            threshold: Umbral de cambio (0-1, default 0.15 = 15% de diferencia)
+        
+        Returns:
+            Lista de esquinas con cambio significativo: ["top_left", "top_right"]
+        """
+        if prev_image is None or curr_image is None:
+            return []
+        
+        if prev_image.shape != curr_image.shape:
+            return []
+        
+        height, width = curr_image.shape[:2]
+        
+        # ROIs: Solo esquinas SUPERIORES (15% ancho x 15% alto)
+        roi_size_w = int(width * 0.15)
+        roi_size_h = int(height * 0.15)
+        
+        rois = [
+            ("top_left", 0, 0, roi_size_w, roi_size_h),
+            ("top_right", width - roi_size_w, 0, width, roi_size_h),
+        ]
+        
+        changed_corners = []
+        
+        # Convertir a escala de grises para comparación
+        prev_gray = cv2.cvtColor(prev_image, cv2.COLOR_BGR2GRAY)
+        curr_gray = cv2.cvtColor(curr_image, cv2.COLOR_BGR2GRAY)
+        
+        for roi_name, x1, y1, x2, y2 in rois:
+            prev_roi = prev_gray[y1:y2, x1:x2]
+            curr_roi = curr_gray[y1:y2, x1:x2]
+            
+            # Calcular diferencia absoluta normalizada
+            diff = cv2.absdiff(prev_roi, curr_roi)
+            mean_diff = np.mean(diff) / 255.0  # Normalizar a 0-1
+            
+            if mean_diff > threshold:
+                changed_corners.append(roi_name)
+        
+        return changed_corners
 
     def find_close_button_dynamic(self, image, ignored_zones=None):
         """
