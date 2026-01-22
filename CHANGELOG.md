@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-01-22
+
+### Fixed
+- **Timeout Recovery Logic**: Now correctly detects REWARD screen (coins) after a timeout/recovery sequence, preventing false STUCK_AD states when the game resumes directly to the reward count.
+
 ## [1.3.0] - 2026-01-22
 
 ### Added

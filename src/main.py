@@ -1042,6 +1042,12 @@ class RealRacingBot:
              self.log("✅ Escapada exitosa con HOME + juego.")
              return "LOBBY"
         
+        # Check for Reward screen (Recovery from direct reward state)
+        for t_name in REWARD_CLOSE_TEMPLATES:
+            if self.vision.find_template(scr, os.path.join(ASSETS_DIR, t_name)):
+                self.log("✅ Escapada exitosa: Pantalla Recompensa detectada.")
+                return "REWARD"
+        
         # Paso 3: Si aún no estamos en lobby, ir a STUCK_AD
         self.log("❌ No se detectó Lobby tras escapada. Estado -> STUCK_AD")
         return "STUCK_AD"
