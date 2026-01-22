@@ -199,6 +199,39 @@ class Vision:
                 
                 templates.append((f"gen_ff_outline_bar_{size}_t{thickness}", img_outline_bar))
                 templates.append((f"gen_ff_outline_bar_inv_{size}_t{thickness}", cv2.bitwise_not(img_outline_bar)))
+            
+            # ========== VARIANTE 5: > > chevron (triángulos abiertos/sin cerrar) ==========
+            for thickness in [2, 3]:
+                img_chevron = np.zeros((size, size), dtype=np.uint8)
+                
+                # Chevron 1: Solo las dos líneas del ángulo (sin base)
+                cv2.line(img_chevron, (x_start, margin), (x_mid - 2, mid_y), 255, thickness)
+                cv2.line(img_chevron, (x_start, size - margin), (x_mid - 2, mid_y), 255, thickness)
+                
+                # Chevron 2
+                cv2.line(img_chevron, (x_mid - 2, margin), (x_end, mid_y), 255, thickness)
+                cv2.line(img_chevron, (x_mid - 2, size - margin), (x_end, mid_y), 255, thickness)
+                
+                templates.append((f"gen_ff_chevron_{size}_t{thickness}", img_chevron))
+                templates.append((f"gen_ff_chevron_inv_{size}_t{thickness}", cv2.bitwise_not(img_chevron)))
+            
+            # ========== VARIANTE 6: > > | chevron con barra ==========
+            for thickness in [2, 3]:
+                img_chevron_bar = np.zeros((size, size), dtype=np.uint8)
+                
+                # Chevron 1
+                cv2.line(img_chevron_bar, (x_start, margin), (x_mid - 2, mid_y), 255, thickness)
+                cv2.line(img_chevron_bar, (x_start, size - margin), (x_mid - 2, mid_y), 255, thickness)
+                
+                # Chevron 2
+                cv2.line(img_chevron_bar, (x_mid - 2, margin), (x_end, mid_y), 255, thickness)
+                cv2.line(img_chevron_bar, (x_mid - 2, size - margin), (x_end, mid_y), 255, thickness)
+                
+                # Barra vertical
+                cv2.line(img_chevron_bar, (x_end + 3, margin), (x_end + 3, size - margin), 255, thickness)
+                
+                templates.append((f"gen_ff_chevron_bar_{size}_t{thickness}", img_chevron_bar))
+                templates.append((f"gen_ff_chevron_bar_inv_{size}_t{thickness}", cv2.bitwise_not(img_chevron_bar)))
         
         return templates
 
