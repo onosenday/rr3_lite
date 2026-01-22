@@ -33,7 +33,7 @@ roi_debug*.png
 Thumbs.db
 
 # Private files (not for GitHub)
-#.agent/
+.agent/
 .env
 todo.md
 REPOSITORY_DESCRIPTION.md
