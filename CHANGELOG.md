@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-01-23
+
+### Fixed
+- **Session Gold Display**: Fixed the session gold counter in the UI to accurately reflect gold earned in the current session.
+
+### Added
+- **UI Version Display**: The program version is now prominently displayed in the main window title.
+
 ## [1.3.1] - 2026-01-22
 
 ### Fixed
