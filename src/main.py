@@ -105,7 +105,8 @@ class RealRacingBot:
                 int(t_gold), 
                 int(h_gold),
                 0.0,
-                0.0
+                0.0,
+                self.session_gold
             )
 
     def log(self, message):
@@ -1088,7 +1089,7 @@ class RealRacingBot:
                 ads_rate = self.session_ads / elapsed if elapsed > 0 else 0
                 
                 # gui.py espera: (today_gold, history_gold, ads_per_hour, gold_per_hour)
-                self.stats_callback(int(t_gold), int(h_gold), ads_rate, gold_rate)
+                self.stats_callback(int(t_gold), int(h_gold), ads_rate, gold_rate, self.session_gold)
         else:
             self.log("⚠ No pude leer la cantidad de oro (o fue 0).")
 

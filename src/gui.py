@@ -279,7 +279,7 @@ class BotGUI:
         self.lbl_header.pack(side=tk.LEFT)
         
         # VERSION / UPDATE LABEL
-        self.lbl_version = tk.Label(header_frame, text=f"v{BOT_VERSION}", fg="#4A5568", bg="#1E3246", font=("Segoe UI", 8))
+        self.lbl_version = tk.Label(header_frame, text=f"Ver: {BOT_VERSION}", fg="#CBD5E0", bg="#1E3246", font=("Segoe UI", 8))
         self.lbl_version.pack(side=tk.LEFT, padx=(5,0), anchor=tk.S)
         
         # UPDATE ALERT (Initially Hidden)
@@ -471,14 +471,18 @@ class BotGUI:
         if cv2_image is not None:
             self.image_queue.put(cv2_image)
             
-    def update_stats(self, todays_total_gold, total_history=0, ads_per_hour=0, gold_per_hour=0):
+    def update_stats(self, todays_total_gold, total_history=0, ads_per_hour=0, gold_per_hour=0, session_gold=None):
         # Programar actualización en el hilo principal
         def _update():
-            # Calcular oro de sesión real (Total Hoy - Inicial al empezar sesión)
-            # Si no estamos corriendo, mostramos 0 o el último valor
-            session_val = 0
-            if self.is_bot_running and self.session_initial_gold >= 0:
-                session_val = max(0, todays_total_gold - self.session_initial_gold)
+            # Calcular oro de sesión real
+            # Si nos pasan el valor directo del bot (contador interno), usamos ese
+            if session_gold is not None:
+                session_val = session_gold
+            else:
+                # Fallback: Cálculo por diferencia DB (Total Hoy - Inicial al empezar sesión)
+                session_val = 0
+                if self.is_bot_running and self.session_initial_gold >= 0:
+                    session_val = max(0, todays_total_gold - self.session_initial_gold)
             
             self.current_session_gold = session_val # Guardar para logging
 
