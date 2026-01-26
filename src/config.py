@@ -72,5 +72,5 @@ MATCH_THRESHOLD = 0.8
 
 
 # Versión y Actualizaciones
-BOT_VERSION = "1.3.2"
+BOT_VERSION = "1.3.3"
 VERSION_CHECK_URL = "https://raw.githubusercontent.com/onosenday/rr3_lite/main/CHANGELOG.md"

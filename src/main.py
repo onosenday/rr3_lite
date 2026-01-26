@@ -96,6 +96,9 @@ class RealRacingBot:
         self.stats_callback = stats_callback
         self.click_callback = click_callback
 
+        # Lobby Timeout Tracker
+        self.lobby_enter_time = None
+
         # Cargar stats iniciales
         if self.stats_callback:
             t_gold = self.logger.get_todays_gold() or 0
@@ -619,6 +622,14 @@ class RealRacingBot:
         # Log de transicion visual
         if self.state != self.last_state:
             self.log(t("log_state_change", from_state=self.last_state.name if self.last_state else 'None', to_state=self.state.name))
+            
+            # --- LOBBY TIMEOUT TRACKER ---
+            if self.state == BotState.GAME_LOBBY:
+                self.lobby_enter_time = time.time()
+            else:
+                 self.lobby_enter_time = None
+            # -----------------------------
+
             self.last_state = self.state
 
         # 0. Chequeo de Contexto Global (Rescue) - Excepto si estamos cambiando zona
@@ -700,6 +711,14 @@ class RealRacingBot:
         # OPTIMIZATION: Use shared screenshot
         if screenshot is None: return
         self.update_live_view(screenshot)
+
+        # --- CHECK TIMEOUT ---
+        if self.lobby_enter_time and (time.time() - self.lobby_enter_time > 120): # 2 minutes
+             self.log("TIMEOUT: Mas de 2 minutos en Lobby sin actividad. Reiniciando juego...")
+             self.adb.stop_app(PACKAGE_NAME)
+             self.state = BotState.UNKNOWN
+             return
+        # ---------------------
 
         # 0. Chequeo de Rescate: ¿Estamos viendo ya una Recompensa?
         for t_name in REWARD_CLOSE_TEMPLATES:

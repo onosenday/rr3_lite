@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-01-26
+
+### Added
+- **Lobby Idle Timeout**: Implemented a 120-second timeout for the GAME_LOBBY state.
+- **Auto Restart**: If the bot remains idle in the lobby for more than 2 minutes, it will automatically restart the game to ensure continued operation.
+
 ## [1.3.2] - 2026-01-23
 
 ### Fixed
